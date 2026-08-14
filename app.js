@@ -3,8 +3,8 @@
 // (Project Settings -> API). The anon/public key is safe to
 // expose in client code; it only allows what RLS policies permit.
 // ============================================================
-const SUPABASE_URL = "https://YOUR_PROJECT.supabase.co";
-const SUPABASE_ANON_KEY = "YOUR_ANON_PUBLIC_KEY";
+const SUPABASE_URL = "https://bfzigmdfgvoedqmfzmub.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_s-aORJHy624eU2s1qzuAqA_3s1xK51R";
 
 // Optional: proxycheck.io API key for VPN/proxy detection.
 // Works without a key at a low rate limit; sign up free for more.
