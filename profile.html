@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Profile — The Court</title>
+<link rel="stylesheet" href="style.css" />
+<style>
+  .profile-header {
+    padding: 24px 18px;
+    text-align: center;
+    border-bottom: 1px solid var(--border);
+  }
+  .profile-avatar {
+    width: 76px; height: 76px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 800; font-size: 28px; color: #fff;
+    margin: 0 auto 12px;
+  }
+  .profile-name { font-size: 20px; font-weight: 800; }
+  .profile-stats {
+    display: flex;
+    justify-content: center;
+    gap: 28px;
+    margin-top: 14px;
+  }
+  .stat-num { font-size: 17px; font-weight: 800; display: block; }
+  .stat-label { font-size: 12px; color: var(--text-dim); }
+  .back-link { padding: 14px 18px 0; display: block; color: var(--text-dim); text-decoration: none; font-size: 14px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <a href="index.html" class="back-link">← The Court</a>
+  <div id="profileHeader" class="profile-header">Loading...</div>
+  <div id="feed" style="padding:14px;display:flex;flex-direction:column;gap:10px;"></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const SUPABASE_URL = "https://YOUR_PROJECT.supabase.co";
+const SUPABASE_ANON_KEY = "YOUR_ANON_PUBLIC_KEY";
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const REACTIONS = [
+  { key: "heart", emoji: "❤" }, { key: "laugh", emoji: "😂" },
+  { key: "fire", emoji: "🔥" }, { key: "skull", emoji: "💀" }
+];
+const AVATAR_PALETTE = [
+  ["#7c5cff", "#ff5cad"], ["#ff8a5c", "#ff5c8a"], ["#5cffb0", "#5c9aff"],
+  ["#ffd15c", "#ff5c5c"], ["#5cffe8", "#7c5cff"], ["#c65cff", "#5c8aff"],
+  ["#ff5c94", "#ffb15c"], ["#5cff8a", "#5cd1ff"]
+];
+function avatarGradient(username) {
+  let hash = 0;
+  for (let i = 0; i < username.length; i++) hash = username.charCodeAt(i) + ((hash << 5) - hash);
+  const [c1, c2] = AVATAR_PALETTE[Math.abs(hash) % AVATAR_PALETTE.length];
+  return `linear-gradient(135deg, ${c1}, ${c2})`;
+}
+function escapeHtml(str) {
+  const div = document.createElement("div");
+  div.textContent = str;
+  return div.innerHTML;
+}
+function timeAgo(iso) {
+  const diff = (Date.now() - new Date(iso).getTime()) / 1000;
+  if (diff < 60) return "abhi";
+  if (diff < 3600) return Math.floor(diff / 60) + "m";
+  if (diff < 86400) return Math.floor(diff / 3600) + "h";
+  return Math.floor(diff / 86400) + "d";
+}
+
+const params = new URLSearchParams(location.search);
+const profileId = params.get("u");
+let VIEWER = null; // the current browser's own user row, if it exists
+
+(async function boot() {
+  if (!profileId) {
+    document.getElementById("profileHeader").textContent = "User nahi mila.";
+    return;
+  }
+
+  const myFp = localStorage.getItem("xc_fp");
+  if (myFp) {
+    const { data } = await sb.from("users").select("*").eq("fingerprint", myFp).maybeSingle();
+    VIEWER = data;
+  }
+
+  const { data: user } = await sb.from("users").select("*").eq("id", profileId).maybeSingle();
+  if (!user) {
+    document.getElementById("profileHeader").textContent = "User nahi mila.";
+    return;
+  }
+
+  const { count: followerCount } = await sb.from("follows").select("*", { count: "exact", head: true }).eq("followee_id", profileId);
+  const { count: followingCount } = await sb.from("follows").select("*", { count: "exact", head: true }).eq("follower_id", profileId);
+  const { count: postCount } = await sb.from("posts").select("*", { count: "exact", head: true }).eq("user_id", profileId);
+
+  let isFollowing = false;
+  if (VIEWER && VIEWER.id !== profileId) {
+    const { data: f } = await sb.from("follows").select("*").eq("follower_id", VIEWER.id).eq("followee_id", profileId).maybeSingle();
+    isFollowing = !!f;
+  }
+
+  renderHeader(user, followerCount || 0, followingCount || 0, postCount || 0, isFollowing);
+  loadPosts(profileId);
+})();
+
+function renderHeader(user, followers, following, posts, isFollowing) {
+  const titleBadge = user.title
+    ? `<span class="title-badge ${user.title === "God" ? "violet" : "grey"}">${user.title}</span>`
+    : "";
+  const followBtn = (!VIEWER || VIEWER.id === user.id) ? "" : `
+    <button class="btn small" id="followBtn" style="margin-top:12px;${isFollowing ? "background:transparent;border:1px solid var(--border);box-shadow:none;" : ""}" data-following="${isFollowing}">
+      ${isFollowing ? "Following" : "+ Follow"}
+    </button>`;
+
+  document.getElementById("profileHeader").innerHTML = `
+    <div class="profile-avatar" style="background:${avatarGradient(user.username)};">${user.username[0].toUpperCase()}</div>
+    <div class="profile-name">${escapeHtml(user.username)} ${titleBadge}</div>
+    <div style="color:var(--text-dim);font-size:12px;margin-top:4px;">Member since ${new Date(user.created_at).toLocaleDateString()}</div>
+    <div class="profile-stats">
+      <div><span class="stat-num">${posts}</span><span class="stat-label">Posts</span></div>
+      <div><span class="stat-num">${followers}</span><span class="stat-label">Followers</span></div>
+      <div><span class="stat-num">${following}</span><span class="stat-label">Following</span></div>
+    </div>
+    ${followBtn}
+  `;
+
+  const btn = document.getElementById("followBtn");
+  if (btn) {
+    btn.addEventListener("click", async () => {
+      const currentlyFollowing = btn.dataset.following === "true";
+      if (currentlyFollowing) {
+        await sb.from("follows").delete().eq("follower_id", VIEWER.id).eq("followee_id", user.id);
+      } else {
+        await sb.from("follows").insert({ follower_id: VIEWER.id, followee_id: user.id });
+      }
+      location.reload();
+    });
+  }
+}
+
+async function loadPosts(userId) {
+  const { data: posts } = await sb
+    .from("posts")
+    .select("*")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false });
+
+  const feed = document.getElementById("feed");
+  if (!posts || posts.length === 0) {
+    feed.innerHTML = `<div class="empty-state">Koi post nahi hai.</div>`;
+    return;
+  }
+
+  feed.innerHTML = posts.map(p => {
+    const counts = p.reaction_counts || {};
+    const breakdown = REACTIONS.filter(r => counts[r.key] > 0).map(r => `${r.emoji}${counts[r.key]}`).join(" ") || "—";
+    return `
+    <div class="post" style="display:block;">
+      <div class="timestamp">${timeAgo(p.created_at)}${p.pinned ? " · 📌 Pinned" : ""}</div>
+      <div class="post-content">${escapeHtml(p.content)}</div>
+      <div class="timestamp">${breakdown}</div>
+    </div>`;
+  }).join("");
+}
+</script>
+</body>
+</html>

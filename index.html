@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>The Court</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<div class="app">
+  <header class="top">
+    <h1>The Court</h1>
+    <span class="visitor-pill"><span class="live-dot"></span><span id="visitorCount">0</span> online</span>
+  </header>
+
+  <div id="blockedBanner" class="blocked-banner" style="display:none;"></div>
+
+  <div class="composer">
+    <div style="font-size:13px;color:var(--text-dim);margin-bottom:6px;">Posting as <strong id="whoami">...</strong> <span id="editUsernameBtn" style="cursor:pointer;color:var(--accent);">✏️</span></div>
+    <div style="font-size:11px;color:var(--text-dim);margin-bottom:10px;word-break:break-all;">Fingerprint: <span id="fpDisplay">...</span></div>
+    <textarea id="postText" placeholder="Kya ho raha hai?"></textarea>
+    <div class="composer-footer">
+      <span class="char-count" id="charCount">0 / 250</span>
+      <button class="btn" id="postBtn" disabled>Post</button>
+    </div>
+  </div>
+
+  <div id="feed"></div>
+</div>
+
+<!-- Supabase JS client -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<!-- Embed SDKs (only fire on posts that actually contain these links) -->
+<script async src="//www.instagram.com/embed.js"></script>
+<script async src="https://platform.twitter.com/widgets.js"></script>
+
+<script src="app.js"></script>
+</body>
+</html>
