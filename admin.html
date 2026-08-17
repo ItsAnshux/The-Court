@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>The Court — Moderator</title>
+<link rel="stylesheet" href="style.css" />
+<style>
+  .tab-btn {
+    flex-shrink: 0;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    padding: 8px 14px;
+    border-radius: 999px;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .tab-btn.active {
+    background: var(--accent-grad);
+    color: #fff;
+    border: none;
+  }
+
+  h3 {
+    font-size: 15px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin: 0 0 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .card-list { display: flex; flex-direction: column; gap: 8px; }
+
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 12px 14px;
+  }
+
+  .card-row1 {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .card-meta {
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-top: 4px;
+    word-break: break-all;
+  }
+
+  .card-content {
+    font-size: 13px;
+    color: var(--text);
+    margin: 6px 0;
+    word-break: break-word;
+  }
+
+  .card-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+    flex-wrap: wrap;
+  }
+
+  /* uniform dark inputs/selects everywhere on this page */
+  input[type="text"], input:not([type]), select, .field-input {
+    background: #000;
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 8px;
+    padding: 7px 10px;
+    font-size: 13px;
+    outline: none;
+    appearance: none;
+    -webkit-appearance: none;
+    font-family: inherit;
+  }
+  select {
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6'><path d='M0 0l5 6 5-6z' fill='%2371767b'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    padding-right: 26px;
+  }
+  input:focus, select:focus { border-color: var(--accent); }
+
+  .empty-note { color: var(--text-dim); font-size: 13px; padding: 10px 0; }
+
+  .gate { padding: 60px 20px; text-align:center; }
+  .gate input { width: 100%; margin: 14px 0; box-sizing: border-box; }
+
+  .ban-tag {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    border: 1px solid var(--danger);
+    color: var(--danger);
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top"><h1>Moderator Panel</h1></header>
+
+  <div id="gate" class="gate">
+    <p style="color:var(--text-dim);font-size:14px;">Apna moderator fingerprint verify karo (index.html khol kar composer ke neeche "Fingerprint:" line dekho).</p>
+    <input id="fpInput" placeholder="Fingerprint yahan paste karo" />
+    <button class="btn" id="gateBtn" style="width:100%;">Enter</button>
+  </div>
+
+  <div id="panel" style="display:none;">
+
+    <div id="tabBar" style="display:flex;gap:6px;padding:12px 14px;overflow-x:auto;border-bottom:1px solid var(--border);">
+      <button class="tab-btn" data-tab="visitors">👀 Visitors</button>
+      <button class="tab-btn" data-tab="posts">📝 Posts</button>
+      <button class="tab-btn" data-tab="words">🚫 Words</button>
+      <button class="tab-btn" data-tab="users">👥 Users</button>
+    </div>
+
+    <div style="padding:14px;">
+      <div id="tab-visitors" class="tab-section">
+        <h3>Live Visitors (<span id="liveCount">0</span>)</h3>
+        <div id="visitorList" class="card-list"><div class="empty-note">Koi visitor online nahi.</div></div>
+      </div>
+
+      <div id="tab-posts" class="tab-section" style="display:none;">
+        <h3>All Posts</h3>
+        <div id="postList" class="card-list"></div>
+      </div>
+
+      <div id="tab-words" class="tab-section" style="display:none;">
+        <h3>Banned Words</h3>
+        <div style="display:flex;gap:8px;margin-bottom:10px;">
+          <input id="newWordInput" placeholder="Naya banned word" style="flex:1;" />
+          <button class="btn small" id="addWordBtn">Add</button>
+        </div>
+        <div id="wordList" style="display:flex;flex-wrap:wrap;gap:8px;"></div>
+      </div>
+
+      <div id="tab-users" class="tab-section" style="display:none;">
+        <h3>All Users</h3>
+        <div id="userList" class="card-list"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const SUPABASE_URL = "https://YOUR_PROJECT.supabase.co";
+const SUPABASE_ANON_KEY = "YOUR_ANON_PUBLIC_KEY";
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+let MOD = null;
+const TITLES = ["King", "Queen", "Joker", "Knight", "Demon Lord", "Demon Knight", "Demon Queen", "Slave", "Angel", "Trump"];
+
+function daysAgo(iso) {
+  const days = Math.floor((Date.now() - new Date(iso).getTime()) / (1000 * 60 * 60 * 24));
+  if (days === 0) return "aaj";
+  if (days === 1) return "1 din pehle";
+  return `${days} din pehle`;
+}
+
+document.getElementById("gateBtn").addEventListener("click", async () => {
+  const fp = document.getElementById("fpInput").value.trim();
+  const { data } = await sb.from("users").select("*").eq("fingerprint", fp).or("is_moderator.eq.true,is_submod.eq.true").maybeSingle();
+  if (!data) { alert("Ye fingerprint moderator/sub-moderator ke tor par register nahi hai."); return; }
+  MOD = data;
+  document.getElementById("gate").style.display = "none";
+  document.getElementById("panel").style.display = "block";
+  loadUsers();
+  loadPosts();
+  loadWords();
+  watchPresence();
+  setupTabs();
+});
+
+function setupTabs() {
+  const tabs = document.querySelectorAll(".tab-btn");
+  tabs.forEach(tab => {
+    tab.addEventListener("click", () => {
+      tabs.forEach(t => t.classList.remove("active"));
+      document.querySelectorAll(".tab-section").forEach(s => s.style.display = "none");
+      tab.classList.add("active");
+      document.getElementById(`tab-${tab.dataset.tab}`).style.display = "block";
+    });
+  });
+  tabs[0].classList.add("active"); // Visitors tab shown by default
+}
+
+// ---------------- Posts ----------------
+async function loadPosts() {
+  const { data: posts } = await sb
+    .from("posts")
+    .select("*, users(username)")
+    .order("pinned", { ascending: false })
+    .order("created_at", { ascending: false });
+
+  const wrap = document.getElementById("postList");
+  if (!posts || posts.length === 0) { wrap.innerHTML = `<div class="empty-note">Koi post nahi hai.</div>`; return; }
+
+  wrap.innerHTML = posts.map(p => `
+    <div class="card" data-id="${p.id}">
+      <div class="card-row1">
+        <strong>${p.users?.username || "?"}</strong>
+        <span class="card-meta">${new Date(p.created_at).toLocaleString()}</span>
+      </div>
+      <div class="card-content">${p.content.replace(/</g, "&lt;")}${p.pinned ? " 📌" : ""}</div>
+      <div class="card-actions">
+        <button class="btn small pinBtn" style="${p.pinned ? "background:#ffd400;color:#000;" : ""}">${p.pinned ? "Unpin" : "Pin"}</button>
+        <button class="btn small delPostBtn" style="background:var(--danger);">Delete</button>
+      </div>
+    </div>
+  `).join("");
+
+  wrap.querySelectorAll(".pinBtn").forEach(btn => {
+    btn.addEventListener("click", async (e) => {
+      const id = e.target.closest(".card").dataset.id;
+      const { data: p } = await sb.from("posts").select("pinned").eq("id", id).single();
+      await sb.from("posts").update({ pinned: !p.pinned }).eq("id", id);
+      loadPosts();
+    });
+  });
+
+  wrap.querySelectorAll(".delPostBtn").forEach(btn => {
+    btn.addEventListener("click", async (e) => {
+      if (!confirm("Ye post permanently delete karni hai?")) return;
+      const id = e.target.closest(".card").dataset.id;
+      await sb.from("posts").delete().eq("id", id);
+      loadPosts();
+    });
+  });
+}
+
+// ---------------- Banned words ----------------
+async function loadWords() {
+  const { data: words } = await sb.from("banned_words").select("*").order("word");
+  const wrap = document.getElementById("wordList");
+  if (!words || words.length === 0) { wrap.innerHTML = `<div class="empty-note">Koi banned word nahi hai.</div>`; return; }
+  wrap.innerHTML = words.map(w => `
+    <span class="title-chip" data-id="${w.id}" style="cursor:default;">
+      ${w.word} <span class="removeWordBtn" data-id="${w.id}" style="cursor:pointer;color:var(--danger);margin-left:6px;">✕</span>
+    </span>
+  `).join("");
+
+  wrap.querySelectorAll(".removeWordBtn").forEach(btn => {
+    btn.addEventListener("click", async (e) => {
+      await sb.from("banned_words").delete().eq("id", e.target.dataset.id);
+      loadWords();
+    });
+  });
+}
+
+document.getElementById("addWordBtn").addEventListener("click", async () => {
+  const input = document.getElementById("newWordInput");
+  const word = input.value.trim().toLowerCase();
+  if (!word) return;
+  const { error } = await sb.from("banned_words").insert({ word });
+  if (error) { alert("Add fail hua: " + error.message); return; }
+  input.value = "";
+  loadWords();
+});
+
+// ---------------- Users ----------------
+async function loadUsers() {
+  const { data: users } = await sb.from("users").select("*").order("last_seen", { ascending: false });
+  const wrap = document.getElementById("userList");
+  if (!users || users.length === 0) { wrap.innerHTML = `<div class="empty-note">Koi user nahi hai.</div>`; return; }
+
+  wrap.innerHTML = users.map(u => `
+    <div class="card" data-id="${u.id}">
+      <div class="card-row1">
+        ${MOD.is_moderator ? `<input class="username-edit" value="${u.username}" style="flex:1;min-width:100px;" />` : `<strong>${u.username}</strong>`}
+        ${u.is_moderator ? `<span class="title-badge violet">God</span>` : u.is_submod ? `<span class="title-badge" style="color:var(--accent);border-color:var(--accent);">Sub-Mod</span>` : ""}
+        ${u.banned_by_mod ? `<span class="ban-tag">Banned</span>` : ""}
+      </div>
+      <div class="card-meta">FP: ${u.fingerprint} · IP: ${u.ip || "-"} ${u.is_blocked ? "· ⚠️ VPN/incognito flagged" : ""}</div>
+      <div class="card-meta">Last seen: ${daysAgo(u.last_seen)}</div>
+      <div class="card-actions">
+        ${u.is_moderator ? "" : `
+        ${MOD.is_moderator ? `
+        <select class="title-edit">
+          <option value="">— no title —</option>
+          ${TITLES.map(t => `<option value="${t}" ${u.title === t ? "selected" : ""}>${t}</option>`).join("")}
+        </select>` : ""}
+        <button class="btn small banBtn" style="${u.banned_by_mod ? "background:var(--danger);" : "background:transparent;border:1px solid var(--danger);color:var(--danger);"}">${u.banned_by_mod ? "Unban" : "Ban"}</button>
+        ${MOD.is_moderator ? `
+        <button class="btn small submodBtn" style="${u.is_submod ? "background:var(--accent);" : "background:transparent;border:1px solid var(--accent);color:var(--accent);"}">${u.is_submod ? "Remove Sub-Mod" : "Make Sub-Mod"}</button>
+        <button class="btn small delUserBtn" style="background:var(--danger);">Delete User</button>
+        ` : ""}
+        `}
+        ${MOD.is_moderator ? `<button class="btn small saveBtn">Save</button>` : ""}
+      </div>
+    </div>
+  `).join("");
+
+  wrap.querySelectorAll(".delUserBtn").forEach(btn => {
+    btn.addEventListener("click", async (e) => {
+      const card = e.target.closest(".card");
+      const id = card.dataset.id;
+      const uname = card.querySelector(".username-edit")?.value || card.querySelector("strong")?.textContent || "is user";
+      if (!confirm(`"${uname}" ko permanently delete karna hai? Unki saari posts, comments, likes, follows bhi saath delete ho jayengi. Ye undo nahi ho sakta.`)) return;
+      const { error } = await sb.from("users").delete().eq("id", id);
+      if (error) { alert("Delete fail hua: " + error.message); return; }
+      loadUsers();
+      loadPosts();
+    });
+  });
+
+  wrap.querySelectorAll(".submodBtn").forEach(btn => {
+    btn.addEventListener("click", async (e) => {
+      const id = e.target.closest(".card").dataset.id;
+      const { data: u } = await sb.from("users").select("is_submod").eq("id", id).single();
+      await sb.from("users").update({ is_submod: !u.is_submod }).eq("id", id);
+      loadUsers();
+    });
+  });
+
+  wrap.querySelectorAll(".banBtn").forEach(btn => {
+    btn.addEventListener("click", async (e) => {
+      const id = e.target.closest(".card").dataset.id;
+      const { data: u } = await sb.from("users").select("banned_by_mod").eq("id", id).single();
+      await sb.from("users").update({ banned_by_mod: !u.banned_by_mod }).eq("id", id);
+      loadUsers();
+    });
+  });
+
+  wrap.querySelectorAll(".saveBtn").forEach(btn => {
+    btn.addEventListener("click", async (e) => {
+      const card = e.target.closest(".card");
+      const id = card.dataset.id;
+      const newName = card.querySelector(".username-edit").value.trim();
+      const titleSelect = card.querySelector(".title-edit");
+      const updates = {};
+      if (newName) updates.username = newName;
+      if (titleSelect) {
+        updates.title = titleSelect.value || null;
+        updates.title_color = titleSelect.value ? "#9a9a9a" : null;
+      }
+      await sb.from("users").update(updates).eq("id", id);
+      loadUsers();
+    });
+  });
+}
+
+// ---------------- Live presence ----------------
+function watchPresence() {
+  const channel = sb.channel("live-visitors");
+  channel
+    .on("presence", { event: "sync" }, () => {
+      const state = channel.presenceState();
+      const rows = Object.values(state).flat();
+      document.getElementById("liveCount").textContent = rows.length;
+      const wrap = document.getElementById("visitorList");
+      wrap.innerHTML = rows.length === 0
+        ? `<div class="empty-note">Koi visitor online nahi.</div>`
+        : rows.map(r => `
+          <div class="card">
+            <div class="card-row1"><strong>${r.username}</strong><span class="card-meta">${new Date(r.online_at).toLocaleTimeString()}</span></div>
+            <div class="card-meta">IP: ${r.ip || "-"}</div>
+          </div>
+        `).join("");
+    })
+    .subscribe();
+}
+</script>
+</body>
+</html>
