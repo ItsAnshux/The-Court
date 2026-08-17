@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Notifications — The Court</title>
+<link rel="stylesheet" href="style.css" />
+<style>
+  .back-link { padding: 14px 18px 0; display: block; color: var(--text-dim); text-decoration: none; font-size: 14px; }
+  .notif-card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
+    padding: 14px; margin-bottom: 10px;
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <a href="index.html" class="back-link">← The Court</a>
+  <div style="padding:18px;">
+    <h2 style="margin:0 0 6px;">🔔 Notifications</h2>
+    <p style="color:var(--text-dim);font-size:13px;margin:0 0 16px;">Jab koi aapko @mention karta hai post ya comment me, wo yahan dikhega.</p>
+    <div id="notifList"></div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const SUPABASE_URL = "https://YOUR_PROJECT.supabase.co";
+const SUPABASE_ANON_KEY = "YOUR_ANON_PUBLIC_KEY";
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+function escapeHtml(str) {
+  const div = document.createElement("div");
+  div.textContent = str;
+  return div.innerHTML;
+}
+function timeAgo(iso) {
+  const diff = (Date.now() - new Date(iso).getTime()) / 1000;
+  if (diff < 60) return "abhi";
+  if (diff < 3600) return Math.floor(diff / 60) + "m pehle";
+  if (diff < 86400) return Math.floor(diff / 3600) + "h pehle";
+  return Math.floor(diff / 86400) + "d pehle";
+}
+
+(async function boot() {
+  const myFp = localStorage.getItem("xc_fp");
+  const wrap = document.getElementById("notifList");
+  if (!myFp) { wrap.innerHTML = `<div class="empty-state">Pehle index.html open karo taaki identity ban sake.</div>`; return; }
+
+  const { data: me } = await sb.from("users").select("*").eq("fingerprint", myFp).maybeSingle();
+  if (!me) { wrap.innerHTML = `<div class="empty-state">Account nahi mila.</div>`; return; }
+
+  const mentionPattern = `%@${me.username}%`;
+
+  const [{ data: posts }, { data: comments }] = await Promise.all([
+    sb.from("posts").select("id, content, created_at, users(username)").ilike("content", mentionPattern).neq("user_id", me.id).order("created_at", { ascending: false }).limit(20),
+    sb.from("comments").select("id, content, created_at, users(username)").ilike("content", mentionPattern).neq("user_id", me.id).order("created_at", { ascending: false }).limit(20)
+  ]);
+
+  const items = [
+    ...(posts || []).map(p => ({ ...p, type: "post" })),
+    ...(comments || []).map(c => ({ ...c, type: "comment" }))
+  ].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+  if (items.length === 0) {
+    wrap.innerHTML = `<div class="empty-state">Abhi koi notification nahi hai.</div>`;
+    return;
+  }
+
+  wrap.innerHTML = items.map(item => `
+    <div class="notif-card">
+      <div style="font-size:13px;color:var(--text-dim);">
+        <strong style="color:var(--text);">${escapeHtml(item.users?.username || "Someone")}</strong>
+        ne aapko ${item.type === "post" ? "ek post" : "ek comment"} me mention kiya · ${timeAgo(item.created_at)}
+      </div>
+      <div style="margin-top:6px;">${escapeHtml(item.content)}</div>
+    </div>
+  `).join("");
+})();
+</script>
+</body>
+</html>
